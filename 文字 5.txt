@@ -1,0 +1,64 @@
+speaking-assessment-web/
+├── app/                  # Next.js App Router
+│   ├── (auth)/           # 登录、注册页面
+│   ├── (dashboard)/      # 题目列表、录音、评分结果页
+│   ├── layout.tsx
+│   └── page.tsx          # 首页
+├── components/           # UI 组件 (shadcn/ui)
+├── lib/                  # Supabase Client & 工具类
+├── hooks/                # 业务逻辑 Hook (useAudioRecorder 等)
+├── public/
+├── package.json
+└── vercel.json           # 解决 404 问题的关键文件
+
+
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ],
+  "framework": "nextjs"
+}
+
+import { createClient } from '@supabase/ssr'
+
+export function createClientComponentClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+import { useState, useRef } from 'react';
+
+export function useRecorder() {
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    chunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (e) => chunksRef.current.push(e.data);
+    mediaRecorder.start();
+    setIsRecording(true);
+  };
+
+  const stopRecording = (): Promise<Blob> => {
+    return new Promise((resolve) => {
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current!.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setIsRecording(false);
+        resolve(blob);
+      };
+    });
+  };
+
+  return { isRecording, startRecording, stopRecording };
+}
